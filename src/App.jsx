@@ -170,25 +170,29 @@ button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 `;
 
 // ---------- armazenamento ----------
+// No navegador os dados ficam no localStorage.
+// Para sincronizar entre aparelhos, troque só estas três funções por chamadas à sua API.
+const PREFIX = "lista:";
+
 async function sGet(key) {
   try {
-    const r = await window.storage.get(key, false);
-    return r ? JSON.parse(r.value) : null;
+    const raw = localStorage.getItem(PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 async function sSet(key, val) {
   try {
-    const r = await window.storage.set(key, JSON.stringify(val), false);
-    return !!r;
+    localStorage.setItem(PREFIX + key, JSON.stringify(val));
+    return true;
   } catch (e) {
     console.error("Erro ao salvar", e);
-    return false;
+    return false; // aba anônima ou armazenamento cheio
   }
 }
 async function sDel(key) {
-  try { await window.storage.delete(key, false); } catch {}
+  try { localStorage.removeItem(PREFIX + key); } catch {}
 }
 
 // Quantidade: apenas números inteiros positivos (1 a 999)
