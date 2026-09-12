@@ -27,6 +27,8 @@ body{margin:0}
 .brand{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0}
 .logo{width:34px;height:34px;border-radius:10px;background:var(--primary);display:grid;place-items:center;flex:none}
 .who{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted)}
+.who .hello{color:var(--muted);font-weight:500;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who .hello:hover{text-decoration:none;color:var(--primary)}
 .who strong{color:var(--text);font-weight:700}
 .btn-sm{background:var(--surface);border:1.5px solid var(--border);color:var(--text);border-radius:10px;padding:7px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
 .btn-sm:hover{border-color:var(--link)}
@@ -151,12 +153,8 @@ select.edit-in{background-position:calc(100% - 15px) 17px,calc(100% - 10px) 17px
 .foot .push{margin-left:auto}
 .foot{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px;color:var(--muted)}
 
-.field{display:block;margin-bottom:14px}
-.field span{display:block;font-size:14px;font-weight:600;margin-bottom:6px}
-.keep{display:flex;gap:10px;align-items:center;font-size:14px;margin:4px 0 18px;cursor:pointer}
 .keep input{width:18px;height:18px;accent-color:var(--link)}
-.error{color:var(--danger);background:var(--danger-tint);border-radius:10px;padding:10px 12px;font-size:14px;margin:0 0 14px;line-height:1.4}
-.switch{margin:16px 0 0;font-size:14px;color:var(--muted);text-align:center}
+.error{color:var(--danger);background:var(--danger-tint);border-radius:10px;padding:10px 12px;font-size:14px;margin:14px 0 0;line-height:1.4}
 .note{margin-top:18px;font-size:12px;color:var(--muted);text-align:center;line-height:1.5}
 .loading{font-size:16px;font-weight:600;color:var(--muted);text-align:center;padding-top:30vh}
 
@@ -164,14 +162,13 @@ button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 @media (max-width:420px){
   .add .qty-in{width:72px}
   .title{font-size:26px}
-  .who .hello{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 `;
 
 // ---------- armazenamento ----------
 // No navegador os dados ficam no localStorage.
-// Para sincronizar entre aparelhos, troque só estas três funções por chamadas à sua API.
+// Para sincronizar entre aparelhos, troque só estas duas funções por chamadas à sua API.
 const PREFIX = "lista:";
 
 async function sGet(key) {
@@ -190,9 +187,6 @@ async function sSet(key, val) {
     console.error("Erro ao salvar", e);
     return false; // aba anônima ou armazenamento cheio
   }
-}
-async function sDel(key) {
-  try { localStorage.removeItem(PREFIX + key); } catch {}
 }
 
 // Quantidade: apenas números inteiros positivos (1 a 999)
@@ -223,16 +217,6 @@ const unitLabel = (u) => UNITS.find((x) => x.id === u)?.label || "un.";
 const lineTotal = (i) => (i.price || 0) * (Number(i.qty) || 1);
 
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
-
-async function hash(text) {
-  if (window.crypto?.subtle) {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
-  let h = 5381;
-  for (const ch of text) h = ((h << 5) + h + ch.charCodeAt(0)) | 0;
-  return "x" + (h >>> 0).toString(16);
-}
 
 const DEFAULT_CATS = [
   { id: "hortifruti", name: "Hortifruti", icon: "🥬" },
@@ -318,10 +302,59 @@ function ThemeToggle({ dark, onToggle }) {
   );
 }
 
+// ---------- boas-vindas: pede só o nome, uma vez ----------
+function Welcome({ onDone, themeToggle }) {
+  const [name, setName] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    const n = name.trim();
+    if (!n) return setErr("Digite um nome para continuar.");
+    setBusy(true);
+    const ok = await sSet("profile", { name: n, createdAt: Date.now() });
+    if (!ok) {
+      setBusy(false);
+      return setErr("Não foi possível salvar agora. Tente de novo.");
+    }
+    onDone({ name: n });
+  };
+
+  return (
+    <>
+      <header className="topbar">
+        <h1 className="brand"><Logo />Lista</h1>
+        {themeToggle}
+      </header>
+
+      <div className="hero">
+        <h2 className="title">Bem-vindo!</h2>
+        <p className="sub">Como você quer ser chamado?</p>
+      </div>
+
+      <div className="panel">
+        <input className="in" autoFocus value={name} placeholder="Seu nome" autoComplete="given-name"
+          aria-label="Como você quer ser chamado"
+          onChange={(e) => { setName(e.target.value); setErr(""); }}
+          onKeyDown={(e) => e.key === "Enter" && !busy && submit()} />
+        {err && <p className="error" role="alert">{err}</p>}
+        <button className="btn" style={{ width: "100%", marginTop: 14 }} onClick={submit} disabled={busy}>
+          {busy ? "Aguarde…" : "Começar minha lista"}
+        </button>
+      </div>
+
+      <p className="note">
+        Protótipo: suas listas ficam guardadas só neste aparelho e neste navegador. Elas não aparecem
+        em outro celular ou computador, e são apagadas se você limpar os dados do navegador.
+      </p>
+    </>
+  );
+}
+
 // ---------- app ----------
 export default function App() {
   const [booting, setBooting] = useState(true);
-  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   // tema: "light", "dark" ou null (segue o sistema até a pessoa escolher)
   const [theme, setTheme] = useState(null);
   const mq = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
@@ -345,19 +378,11 @@ export default function App() {
     (async () => {
       const t = await sGet("pref:theme");
       if (t === "light" || t === "dark") setTheme(t);
-      const s = await sGet("session");
-      if (s?.username) {
-        const u = await sGet("user:" + s.username);
-        if (u) setUser({ username: u.username, name: u.name });
-      }
+      const p = await sGet("profile");
+      if (p?.name) setProfile(p);
       setBooting(false);
     })();
   }, []);
-
-  const logout = async () => {
-    await sDel("session");
-    setUser(null);
-  };
 
   return (
     <div className={"app" + (dark ? " dark" : "")}>
@@ -365,127 +390,18 @@ export default function App() {
       <div className="wrap">
         {booting ? (
           <div className="loading">Carregando…</div>
-        ) : user ? (
-          <Lists user={user} onLogout={logout} themeToggle={<ThemeToggle dark={dark} onToggle={toggleTheme} />} />
+        ) : profile ? (
+          <Lists profile={profile} onRename={setProfile} themeToggle={<ThemeToggle dark={dark} onToggle={toggleTheme} />} />
         ) : (
-          <Auth onAuth={setUser} themeToggle={<ThemeToggle dark={dark} onToggle={toggleTheme} />} />
+          <Welcome onDone={setProfile} themeToggle={<ThemeToggle dark={dark} onToggle={toggleTheme} />} />
         )}
       </div>
     </div>
   );
 }
 
-// ---------- login / cadastro ----------
-function Auth({ onAuth, themeToggle }) {
-  const [mode, setMode] = useState("entrar");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [keep, setKeep] = useState(true);
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const submit = async () => {
-    setErr("");
-    const u = email.trim().toLowerCase(); // o e-mail é a identificação da conta
-    if (mode === "criar" && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(u))
-      return setErr("Digite um e-mail válido, como nome@email.com.");
-    if (!u) return setErr("Digite seu e-mail.");
-    if (mode === "criar" && !name.trim()) return setErr("Digite seu nome.");
-    if (pw.length < 8) return setErr("A senha precisa ter pelo menos 8 caracteres.");
-
-    setBusy(true);
-    const existing = await sGet("user:" + u);
-
-    if (mode === "criar") {
-      if (existing) {
-        setBusy(false);
-        return setErr("Já existe uma conta com esse e-mail. Entre com a sua senha.");
-      }
-      const salt = uid();
-      const rec = { username: u, email: u, name: name.trim(), salt, passHash: await hash(salt + pw), createdAt: Date.now() };
-      const ok = (await sSet("user:" + u, rec)) && (await sSet("data:" + u, newData()));
-      if (!ok) {
-        setBusy(false);
-        return setErr("Não foi possível criar a conta agora. Tente de novo.");
-      }
-      if (keep) await sSet("session", { username: u });
-      onAuth({ username: u, name: rec.name });
-    } else {
-      if (!existing || (await hash(existing.salt + pw)) !== existing.passHash) {
-        setBusy(false);
-        return setErr("E-mail ou senha incorretos.");
-      }
-      if (keep) await sSet("session", { username: u });
-      else await sDel("session");
-      onAuth({ username: u, name: existing.name });
-    }
-  };
-
-  const onKey = (e) => e.key === "Enter" && !busy && submit();
-  const creating = mode === "criar";
-
-  return (
-    <>
-      <header className="topbar">
-        <h1 className="brand"><Logo />Lista</h1>
-        {themeToggle}
-      </header>
-
-      <div className="hero">
-        <h2 className="title">{creating ? "Crie sua conta" : "Entre na sua conta"}</h2>
-        <p className="sub">
-          {creating ? "Suas listas ficam salvas e prontas quando você voltar." : "Suas listas estão do jeito que você deixou."}
-        </p>
-      </div>
-
-      <div className="panel">
-        {creating && (
-          <label className="field">
-            <span>Seu nome</span>
-            <input className="in" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={onKey}
-              autoComplete="name" placeholder="Como quer ser chamado" />
-          </label>
-        )}
-        <label className="field">
-          <span>E-mail</span>
-          <input className="in" type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKey}
-            autoCapitalize="none" autoCorrect="off" autoComplete="email" inputMode="email" placeholder="nome@email.com" />
-        </label>
-        <label className="field">
-          <span>Senha</span>
-          <input className="in" type="password" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={onKey}
-            autoComplete={creating ? "new-password" : "current-password"} placeholder={creating ? "Mínimo de 8 caracteres" : ""} />
-        </label>
-
-        <label className="keep">
-          <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} />
-          Continuar conectado
-        </label>
-
-        {err && <p className="error" role="alert">{err}</p>}
-
-        <button className="btn" style={{ width: "100%" }} onClick={submit} disabled={busy}>
-          {busy ? "Aguarde…" : creating ? "Criar conta" : "Entrar"}
-        </button>
-
-        <p className="switch">
-          {creating ? "Já tem conta? " : "Ainda não tem conta? "}
-          <button className="linkbtn" onClick={() => { setMode(creating ? "entrar" : "criar"); setErr(""); }}>
-            {creating ? "Entrar" : "Criar conta"}
-          </button>
-        </p>
-      </div>
-      <p className="note">
-        Protótipo: a conta fica guardada neste navegador. Para entrar do celular e do computador com as mesmas
-        listas, falta ligar um servidor.
-      </p>
-    </>
-  );
-}
-
 // ---------- listas ----------
-function Lists({ user, onLogout, themeToggle }) {
+function Lists({ profile, onRename, themeToggle }) {
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("saved");
   const [itemName, setItemName] = useState("");
@@ -503,16 +419,26 @@ function Lists({ user, onLogout, themeToggle }) {
   const [dragItem, setDragItem] = useState(null);
   const [lastSort, setLastSort] = useState(null);
   const rowEls = useRef({});
+  const [editName, setEditName] = useState(null); // null = não está trocando o nome
   const [newCatOpen, setNewCatOpen] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const loaded = useRef(false);
   const dataRef = useRef(null);
   const itemRef = useRef(null);
-  const key = "data:" + user.username;
+  const key = "data"; // sem contas: uma única lista de dados neste navegador
 
   useEffect(() => {
     (async () => {
       let d = await sGet(key);
+      // migra dados de quem já usava o app com conta
+      let migrated = false;
+      if (!d) {
+        const sess = await sGet("session");
+        if (sess?.username) {
+          d = await sGet("data:" + sess.username);
+          migrated = !!d;
+        }
+      }
       if (!d || !d.lists?.length) d = newData();
       if (!d.lists.some((l) => l.id === d.activeId)) d.activeId = d.lists[0].id;
       if (!d.history) d.history = [];
@@ -532,6 +458,7 @@ function Lists({ user, onLogout, themeToggle }) {
       });
       delete d.categories;
       delete d.catActive;
+      if (migrated) await sSet(key, d); // grava já na chave nova
       setData(d);
     })();
   }, [key]);
@@ -550,9 +477,13 @@ function Lists({ user, onLogout, themeToggle }) {
 
   useEffect(() => { setConfirmDel(false); setConfirmUncheck(false); setOrgItems(false); setLastSort(null); }, [data?.activeId]);
 
-  const logout = async () => {
-    if (dataRef.current) await sSet(key, dataRef.current);
-    onLogout();
+  const saveName = async () => {
+    const n = (editName || "").trim();
+    if (n) {
+      await sSet("profile", { ...profile, name: n });
+      onRename({ ...profile, name: n });
+    }
+    setEditName(null);
   };
 
   if (!data) return <div className="loading">Carregando suas listas…</div>;
@@ -861,11 +792,24 @@ function Lists({ user, onLogout, themeToggle }) {
       <header className="topbar">
         <h1 className="brand"><Logo />Lista</h1>
         <div className="who">
-          <span className="hello">Olá, <strong>{user.name}</strong></span>
+          <button className="hello linkbtn" onClick={() => setEditName(profile.name)}
+            title="Trocar meu nome">Olá, <strong>{profile.name}</strong></button>
           {themeToggle}
-          <button className="btn-sm" onClick={logout}>Sair</button>
         </div>
       </header>
+
+      {editName !== null && (
+        <div className="newlist">
+          <input className="in" autoFocus value={editName} aria-label="Como você quer ser chamado"
+            onChange={(e) => setEditName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveName();
+              if (e.key === "Escape") setEditName(null);
+            }} />
+          <button className="btn" onClick={saveName}>Salvar</button>
+          <button className="btn ghost" onClick={() => setEditName(null)}>Cancelar</button>
+        </div>
+      )}
 
       {organizing ? (
         <>
@@ -1104,6 +1048,11 @@ function Lists({ user, onLogout, themeToggle }) {
           </div>
         )}
       </section>
+
+      <p className="note">
+        Protótipo: estas listas ficam guardadas só neste aparelho e neste navegador. Elas não aparecem
+        em outro celular ou computador, e são apagadas se você limpar os dados do navegador.
+      </p>
     </>
   );
 }
