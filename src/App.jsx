@@ -67,9 +67,15 @@ body{margin:0}
 .in::placeholder{color:var(--faint)}
 .in:focus{outline:none;border-color:var(--link);background:var(--surface);box-shadow:0 0 0 3px rgba(46,125,79,.15)}
 .add{display:flex;flex-direction:column;gap:8px}
-.add-row{display:flex;gap:8px}
-.add .qty-in{width:84px;flex:none}
-.add .price-in{flex:1}
+.add-row{display:flex;gap:8px;flex-wrap:wrap}
+.add .qty-in{width:74px;flex:none}
+.add .unit-in{width:86px;flex:none}
+.add .price-in{flex:1;min-width:120px}
+.add .btn{flex:1;min-width:120px}
+select.in,select.edit-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:26px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 15px) 21px,calc(100% - 10px) 21px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+select.edit-in{background-position:calc(100% - 15px) 17px,calc(100% - 10px) 17px}
 .price{flex:none;white-space:nowrap;font-size:13px;font-weight:700;color:var(--text)}
 .row.done .price{color:var(--done)}
 .money{font-size:14px;margin:4px 0 0;font-weight:600}
@@ -117,8 +123,10 @@ body{margin:0}
 .edit-in{width:100%;min-width:0;height:40px;border:1.5px solid var(--border);border-radius:10px;padding:0 10px;font:inherit;font-size:16px;color:var(--text);background:var(--input)}
 .edit-in:focus{outline:none;border-color:var(--link);background:var(--surface);box-shadow:0 0 0 3px rgba(46,125,79,.15)}
 .edit-in.bad{border-color:var(--danger);box-shadow:0 0 0 3px rgba(192,57,43,.15)}
-.edit-in.qty-e{width:76px;flex:none}
-.edit-in.price-e{flex:1}
+.edit-line{flex-wrap:wrap}
+.edit-in.qty-e{width:70px;flex:none}
+.edit-in.unit-e{width:84px;flex:none}
+.edit-in.price-e{flex:1;min-width:110px}
 .edit-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end}
 .btn.sm{height:38px;padding:0 14px;font-size:14px;border-radius:10px}
 .dup{font-size:13px;font-weight:600;color:var(--danger);margin-right:auto}
@@ -162,29 +170,25 @@ button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 `;
 
 // ---------- armazenamento ----------
-// Dentro do navegador, os dados ficam no localStorage (mesmas funções do protótipo).
-// Para sincronizar entre aparelhos, troque só estas três funções por chamadas à sua API.
-const PREFIX = "lista:";
-
 async function sGet(key) {
   try {
-    const raw = localStorage.getItem(PREFIX + key);
-    return raw ? JSON.parse(raw) : null;
+    const r = await window.storage.get(key, false);
+    return r ? JSON.parse(r.value) : null;
   } catch {
     return null;
   }
 }
 async function sSet(key, val) {
   try {
-    localStorage.setItem(PREFIX + key, JSON.stringify(val));
-    return true;
+    const r = await window.storage.set(key, JSON.stringify(val), false);
+    return !!r;
   } catch (e) {
     console.error("Erro ao salvar", e);
-    return false; // pode acontecer em aba anônima ou com o armazenamento cheio
+    return false;
   }
 }
 async function sDel(key) {
-  try { localStorage.removeItem(PREFIX + key); } catch {}
+  try { await window.storage.delete(key, false); } catch {}
 }
 
 // Quantidade: apenas números inteiros positivos (1 a 999)
@@ -199,6 +203,19 @@ const toCents = (v) => {
   return d ? parseInt(d, 10) : null;
 };
 const brl = (cents) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+// Unidades de medida; quem não escolher fica com "un."
+const UNITS = [
+  { id: "un", label: "un." },
+  { id: "kg", label: "kg" },
+  { id: "g", label: "g" },
+  { id: "L", label: "L" },
+  { id: "ml", label: "ml" },
+  { id: "pct", label: "pct" },
+  { id: "cx", label: "cx" },
+  { id: "dz", label: "dz" },
+];
+const unitLabel = (u) => UNITS.find((x) => x.id === u)?.label || "un.";
+
 const lineTotal = (i) => (i.price || 0) * (Number(i.qty) || 1);
 
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
@@ -358,7 +375,7 @@ export default function App() {
 function Auth({ onAuth, themeToggle }) {
   const [mode, setMode] = useState("entrar");
   const [name, setName] = useState("");
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [keep, setKeep] = useState(true);
   const [err, setErr] = useState("");
@@ -366,10 +383,12 @@ function Auth({ onAuth, themeToggle }) {
 
   const submit = async () => {
     setErr("");
-    const u = username.trim().toLowerCase();
-    if (!/^[a-z0-9._-]{3,24}$/.test(u))
-      return setErr("O usuário precisa ter de 3 a 24 caracteres: letras sem acento, números, ponto, hífen ou sublinhado.");
-    if (pw.length < 4) return setErr("A senha precisa ter pelo menos 4 caracteres.");
+    const u = email.trim().toLowerCase(); // o e-mail é a identificação da conta
+    if (mode === "criar" && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(u))
+      return setErr("Digite um e-mail válido, como nome@email.com.");
+    if (!u) return setErr("Digite seu e-mail.");
+    if (mode === "criar" && !name.trim()) return setErr("Digite seu nome.");
+    if (pw.length < 8) return setErr("A senha precisa ter pelo menos 8 caracteres.");
 
     setBusy(true);
     const existing = await sGet("user:" + u);
@@ -377,10 +396,10 @@ function Auth({ onAuth, themeToggle }) {
     if (mode === "criar") {
       if (existing) {
         setBusy(false);
-        return setErr("Esse usuário já existe. Entre com a senha ou escolha outro nome.");
+        return setErr("Já existe uma conta com esse e-mail. Entre com a sua senha.");
       }
       const salt = uid();
-      const rec = { username: u, name: name.trim() || u, salt, passHash: await hash(salt + pw), createdAt: Date.now() };
+      const rec = { username: u, email: u, name: name.trim(), salt, passHash: await hash(salt + pw), createdAt: Date.now() };
       const ok = (await sSet("user:" + u, rec)) && (await sSet("data:" + u, newData()));
       if (!ok) {
         setBusy(false);
@@ -391,7 +410,7 @@ function Auth({ onAuth, themeToggle }) {
     } else {
       if (!existing || (await hash(existing.salt + pw)) !== existing.passHash) {
         setBusy(false);
-        return setErr("Usuário ou senha incorretos.");
+        return setErr("E-mail ou senha incorretos.");
       }
       if (keep) await sSet("session", { username: u });
       else await sDel("session");
@@ -420,17 +439,19 @@ function Auth({ onAuth, themeToggle }) {
         {creating && (
           <label className="field">
             <span>Seu nome</span>
-            <input className="in" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={onKey} placeholder="Como quer ser chamado" />
+            <input className="in" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={onKey}
+              autoComplete="name" placeholder="Como quer ser chamado" />
           </label>
         )}
         <label className="field">
-          <span>Usuário</span>
-          <input className="in" value={username} onChange={(e) => setUsername(e.target.value)} onKeyDown={onKey}
-            autoCapitalize="none" autoCorrect="off" placeholder="ex.: guilherme" />
+          <span>E-mail</span>
+          <input className="in" type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKey}
+            autoCapitalize="none" autoCorrect="off" autoComplete="email" inputMode="email" placeholder="nome@email.com" />
         </label>
         <label className="field">
           <span>Senha</span>
-          <input className="in" type="password" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={onKey} placeholder="Mínimo de 4 caracteres" />
+          <input className="in" type="password" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={onKey}
+            autoComplete={creating ? "new-password" : "current-password"} placeholder={creating ? "Mínimo de 8 caracteres" : ""} />
         </label>
 
         <label className="keep">
@@ -451,7 +472,10 @@ function Auth({ onAuth, themeToggle }) {
           </button>
         </p>
       </div>
-      <p className="note">Protótipo: contas e listas ficam guardadas no armazenamento deste app.</p>
+      <p className="note">
+        Protótipo: a conta fica guardada neste navegador. Para entrar do celular e do computador com as mesmas
+        listas, falta ligar um servidor.
+      </p>
     </>
   );
 }
@@ -462,6 +486,7 @@ function Lists({ user, onLogout, themeToggle }) {
   const [status, setStatus] = useState("saved");
   const [itemName, setItemName] = useState("");
   const [qty, setQty] = useState("");
+  const [unit, setUnit] = useState("un");
   const [price, setPrice] = useState(null); // centavos
   const [newOpen, setNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -554,7 +579,7 @@ function Lists({ user, onLogout, themeToggle }) {
     setData((d) => ({ ...d, lists: d.lists.map((l) => (l.id === d.activeId ? fn(l) : l)) }));
 
   // O item entra na categoria selecionada no momento
-  const addItem = (rawName, rawQty = "", fromSuggestion = false, cents = null) => {
+  const addItem = (rawName, rawQty = "", fromSuggestion = false, cents = null, un = "un") => {
     const n = rawName.trim();
     const q = onlyInt(rawQty);
     const pr = cents && cents > 0 ? cents : null;
@@ -570,9 +595,9 @@ function Lists({ user, onLogout, themeToggle }) {
         if (l.id !== d.activeId) return l;
         const existing = l.items.find((i) => i.name.toLowerCase() === low);
         if (existing) {
-          return { ...l, items: l.items.map((i) => (i.id === existing.id ? { ...i, done: false, qty: q || i.qty, price: pr ?? i.price ?? null, cat } : i)) };
+          return { ...l, items: l.items.map((i) => (i.id === existing.id ? { ...i, done: false, qty: q || i.qty, unit: q ? un : i.unit, price: pr ?? i.price ?? null, cat } : i)) };
         }
-        return { ...l, items: [{ id: uid(), name: n, qty: q, price: pr, cat, done: false, createdAt: Date.now() }, ...l.items] };
+        return { ...l, items: [{ id: uid(), name: n, qty: q, unit: un, price: pr, cat, done: false, createdAt: Date.now() }, ...l.items] };
       });
       const history = [n, ...d.history.filter((h) => h.toLowerCase() !== low)].slice(0, 30);
       const itemCats = cat === "none" ? d.itemCats : { ...d.itemCats, [low]: cat };
@@ -756,9 +781,10 @@ function Lists({ user, onLogout, themeToggle }) {
   };
 
   const submitItem = () => {
-    addItem(itemName, qty, false, price);
+    addItem(itemName, qty, false, price, unit);
     setItemName("");
     setQty("");
+    setUnit("un");
     setPrice(null);
     itemRef.current?.focus();
   };
@@ -780,7 +806,7 @@ function Lists({ user, onLogout, themeToggle }) {
       };
     });
   // Edita nome, quantidade e preço; devolve false se o novo nome já existir em outro item da lista
-  const editItem = (id, { name: raw, qty: rawQty, price: cents }) => {
+  const editItem = (id, { name: raw, qty: rawQty, unit: un, price: cents }) => {
     const item = active.items.find((i) => i.id === id);
     if (!item) return true;
     const n = raw.trim() || item.name; // nome vazio mantém o anterior
@@ -791,7 +817,7 @@ function Lists({ user, onLogout, themeToggle }) {
     const oldLow = item.name.toLowerCase();
     setData((d) => {
       const lists = d.lists.map((l) =>
-        l.id === d.activeId ? { ...l, items: l.items.map((i) => (i.id === id ? { ...i, name: n, qty: q, price: pr } : i)) } : l
+        l.id === d.activeId ? { ...l, items: l.items.map((i) => (i.id === id ? { ...i, name: n, qty: q, unit: un || "un", price: pr } : i)) } : l
       );
       const history = d.history
         .map((h) => (h.toLowerCase() === oldLow ? n : h))
@@ -922,6 +948,10 @@ function Lists({ user, onLogout, themeToggle }) {
                 if (e.key.length === 1 && !/\d/.test(e.key) && !e.ctrlKey && !e.metaKey) e.preventDefault();
                 onItemKey(e);
               }} />
+            <select className="in unit-in" value={unit} aria-label="Unidade de medida"
+              onChange={(e) => setUnit(e.target.value)}>
+              {UNITS.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+            </select>
             <input className="in price-in" value={price ? brl(price) : ""} placeholder="Preço (R$)"
               type="text" inputMode="numeric"
               aria-label="Preço por unidade, opcional"
@@ -1088,19 +1118,21 @@ function Row({ item, onToggle, onRemove, onEdit, organizing, dragging, canUp, ca
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.name);
   const [dQty, setDQty] = useState(item.qty || "");
+  const [dUnit, setDUnit] = useState(item.unit || "un");
   const [dPrice, setDPrice] = useState(item.price || null);
   const [dup, setDup] = useState(false);
 
   const startEdit = () => {
     setDraft(item.name);
     setDQty(item.qty || "");
+    setDUnit(item.unit || "un");
     setDPrice(item.price || null);
     setDup(false);
     setEditing(true);
   };
   const cancel = () => setEditing(false);
   const save = () => {
-    if (onEdit(item.id, { name: draft, qty: dQty, price: dPrice })) setEditing(false);
+    if (onEdit(item.id, { name: draft, qty: dQty, unit: dUnit, price: dPrice })) setEditing(false);
     else setDup(true);
   };
   const keys = (e) => {
@@ -1117,7 +1149,7 @@ function Row({ item, onToggle, onRemove, onEdit, organizing, dragging, canUp, ca
           </svg>
         </span>
         <span className="name"><span className="label">{item.name}</span></span>
-        {item.qty && <span className="qty">{item.qty} un.</span>}
+        {item.qty && <span className="qty">{item.qty} {unitLabel(item.unit)}</span>}
         {item.price ? <span className="price">{brl(item.price)}</span> : null}
         <span className="arrows">
           <button className="arrow" disabled={!canUp} onClick={() => onMove(item.id, -1)} aria-label={"Mover " + item.name + " para cima"}><Chevron up /></button>
@@ -1145,6 +1177,10 @@ function Row({ item, onToggle, onRemove, onEdit, organizing, dragging, canUp, ca
               inputMode="numeric" pattern="[0-9]*" maxLength={3} aria-label="Quantidade, opcional"
               onChange={(e) => setDQty(onlyInt(e.target.value))}
               onKeyDown={(e) => { digitsOnly(e); keys(e); }} />
+            <select className="edit-in unit-e" value={dUnit} aria-label="Unidade de medida"
+              onChange={(e) => setDUnit(e.target.value)}>
+              {UNITS.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+            </select>
             <input className="edit-in price-e" value={dPrice ? brl(dPrice) : ""} placeholder="Preço (R$)"
               inputMode="numeric" aria-label="Preço por unidade, opcional"
               onChange={(e) => setDPrice(toCents(e.target.value))}
@@ -1161,7 +1197,7 @@ function Row({ item, onToggle, onRemove, onEdit, organizing, dragging, canUp, ca
           <span className="name" onClick={() => onToggle(item.id)}>
             <span className="label">{item.name}</span>
           </span>
-          {item.qty && <span className="qty">{item.qty} un.</span>}
+          {item.qty && <span className="qty">{item.qty} {unitLabel(item.unit)}</span>}
         {item.price ? <span className="price">{brl(item.price)}</span> : null}
           <button className="edit" aria-label={"Editar " + item.name} title="Editar nome, quantidade e preço" onClick={startEdit}>
             <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
