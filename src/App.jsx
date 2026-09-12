@@ -212,6 +212,8 @@ const UNITS = [
   { id: "cx", label: "cx" },
   { id: "dz", label: "dz" },
 ];
+// Em kg o preço é entendido como preço por quilo
+const isKg = (u) => u === "kg";
 const unitLabel = (u) => UNITS.find((x) => x.id === u)?.label || "un.";
 
 const lineTotal = (i) => (i.price || 0) * (Number(i.qty) || 1);
@@ -900,9 +902,10 @@ function Lists({ profile, onRename, themeToggle }) {
               onChange={(e) => setUnit(e.target.value)}>
               {UNITS.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
             </select>
-            <input className="in price-in" value={price ? brl(price) : ""} placeholder="Preço (R$)"
+            <input className="in price-in" value={price ? brl(price) : ""}
+              placeholder={isKg(unit) ? "Preço por kg" : "Preço (R$)"}
               type="text" inputMode="numeric"
-              aria-label="Preço por unidade, opcional"
+              aria-label={isKg(unit) ? "Preço por quilo, opcional" : "Preço por unidade, opcional"}
               onChange={(e) => setPrice(toCents(e.target.value))}
               onKeyDown={(e) => {
                 if (e.key.length === 1 && !/\d/.test(e.key) && !e.ctrlKey && !e.metaKey) e.preventDefault();
@@ -1103,7 +1106,7 @@ function Row({ item, onToggle, onRemove, onEdit, organizing, dragging, canUp, ca
         </span>
         <span className="name"><span className="label">{item.name}</span></span>
         {item.qty && <span className="qty">{item.qty} {unitLabel(item.unit)}</span>}
-        {item.price ? <span className="price">{brl(item.price)}</span> : null}
+        {item.price ? <span className="price">{brl(item.price)}{isKg(item.unit) ? "/kg" : ""}</span> : null}
         <span className="arrows">
           <button className="arrow" disabled={!canUp} onClick={() => onMove(item.id, -1)} aria-label={"Mover " + item.name + " para cima"}><Chevron up /></button>
           <button className="arrow" disabled={!canDown} onClick={() => onMove(item.id, 1)} aria-label={"Mover " + item.name + " para baixo"}><Chevron /></button>
@@ -1134,8 +1137,9 @@ function Row({ item, onToggle, onRemove, onEdit, organizing, dragging, canUp, ca
               onChange={(e) => setDUnit(e.target.value)}>
               {UNITS.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
             </select>
-            <input className="edit-in price-e" value={dPrice ? brl(dPrice) : ""} placeholder="Preço (R$)"
-              inputMode="numeric" aria-label="Preço por unidade, opcional"
+            <input className="edit-in price-e" value={dPrice ? brl(dPrice) : ""}
+              placeholder={isKg(dUnit) ? "Preço por kg" : "Preço (R$)"}
+              inputMode="numeric" aria-label={isKg(dUnit) ? "Preço por quilo, opcional" : "Preço por unidade, opcional"}
               onChange={(e) => setDPrice(toCents(e.target.value))}
               onKeyDown={(e) => { digitsOnly(e); keys(e); }} />
           </div>
@@ -1151,7 +1155,7 @@ function Row({ item, onToggle, onRemove, onEdit, organizing, dragging, canUp, ca
             <span className="label">{item.name}</span>
           </span>
           {item.qty && <span className="qty">{item.qty} {unitLabel(item.unit)}</span>}
-        {item.price ? <span className="price">{brl(item.price)}</span> : null}
+        {item.price ? <span className="price">{brl(item.price)}{isKg(item.unit) ? "/kg" : ""}</span> : null}
           <button className="edit" aria-label={"Editar " + item.name} title="Editar nome, quantidade e preço" onClick={startEdit}>
             <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
               <path d="M11.2 2.3a1.4 1.4 0 0 1 2 0l.5.5a1.4 1.4 0 0 1 0 2L6 12.5 2.5 13.5l1-3.5z" fill="none"
